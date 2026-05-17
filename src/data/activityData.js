@@ -1,0 +1,42 @@
+export const recentActivity = [
+  {
+    id: 1,
+    type: 'upload',
+    icon: 'mdi-cloud-upload',
+    color: 'primary',
+    title: 'رفع درس "المعادلات الخطية"',
+    time: 'منذ ساعتين',
+  },
+  {
+    id: 2,
+    type: 'process',
+    icon: 'mdi-creation',
+    color: 'secondary',
+    title: 'اكتملت معالجة درس "قوانين نيوتن"',
+    time: 'منذ 5 ساعات',
+  },
+  {
+    id: 3,
+    type: 'student',
+    icon: 'mdi-account-group',
+    color: 'success',
+    title: '42 طالباً تفاعلوا مع درسك اليوم',
+    time: 'منذ يوم',
+  },
+  {
+    id: 4,
+    type: 'processing',
+    icon: 'mdi-cog',
+    color: 'warning',
+    title: 'جاري معالجة "الخلية والأنسجة"',
+    time: 'الآن',
+  },
+  {
+    id: 5,
+    type: 'draft',
+    icon: 'mdi-pencil',
+    color: 'grey',
+    title: 'مسودة "النحو والصرف" بانتظار التسجيل الصوتي',
+    time: 'منذ 3 أيام',
+  },
+]
