@@ -121,7 +121,10 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import PageHeader from '../../components/common/PageHeader.vue'
 import { useAuth } from '../../composables/useAuth.js'
+import { getProfileApi, updateProfileApi } from '../../api/student.js'
+import { getErrorMessage } from '../../api/client.js'
 import { getStudentProfilePrefs, setStudentProfilePrefs } from '../../utils/session.js'
+import { isApiMode } from '../../utils/session.js'
 import {
   interestOptions,
   difficultyLevels,
@@ -156,7 +159,17 @@ const selectedDifficultyLabel = computed(() =>
   difficultyLevels.find((l) => l.value === prefs.difficulty)?.title ?? 'متوسط',
 )
 
-onMounted(() => {
+onMounted(async () => {
+  if (isApiMode()) {
+    try {
+      const data = await getProfileApi()
+      prefs.interests = [...(data.interests || defaultProfilePrefs.interests)]
+      prefs.difficulty = data.difficulty || defaultProfilePrefs.difficulty
+      return
+    } catch {
+      /* fallback to local */
+    }
+  }
   const saved = getStudentProfilePrefs()
   if (saved) {
     prefs.interests = [...(saved.interests || defaultProfilePrefs.interests)]
@@ -170,13 +183,23 @@ function toggleInterest(value) {
   else prefs.interests.push(value)
 }
 
-function save() {
+async function save() {
   saving.value = true
-  setTimeout(() => {
+  try {
+    if (isApiMode()) {
+      await updateProfileApi({
+        interests: [...prefs.interests],
+        difficulty: prefs.difficulty,
+      })
+    }
     setStudentProfilePrefs({ ...prefs })
-    saving.value = false
     saveSuccess.value = true
-  }, 500)
+  } catch (err) {
+    saveSuccess.value = false
+    alert(getErrorMessage(err, 'تعذر حفظ التفضيلات'))
+  } finally {
+    saving.value = false
+  }
 }
 </script>
 

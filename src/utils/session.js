@@ -43,3 +43,7 @@ export function getStudentProfilePrefs() {
 export function setStudentProfilePrefs(prefs) {
   localStorage.setItem(PROFILE_KEY, JSON.stringify(prefs))
 }
+
+export function isApiMode() {
+  return import.meta.env.VITE_USE_MOCK !== 'true'
+}

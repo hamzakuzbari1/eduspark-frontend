@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import { getSession } from '../utils/session.js'
+import { getSession, isApiMode } from '../utils/session.js'
 
 const routes = [
   {
@@ -90,7 +90,9 @@ const router = createRouter({
 
 router.beforeEach((to) => {
   const session = getSession()
-  const isAuth = !!session
+  const isAuth = isApiMode()
+    ? !!session?.accessToken
+    : !!(session?.accessToken || session?.loggedInAt)
 
   if (to.meta.guest && isAuth) {
     return session.role === 'teacher'

@@ -111,34 +111,64 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import PageHeader from '../../components/common/PageHeader.vue'
 import StatCard from '../../components/teacher/StatCard.vue'
 import StudentLessonCard from '../../components/student/StudentLessonCard.vue'
+import { fetchStudentLessons } from '../../api/student.js'
 import {
   studentProfile,
   studentStats,
   getAvailableStudentLessons,
 } from '../../data/studentData.js'
+import { useAuth } from '../../composables/useAuth.js'
+import { isApiMode } from '../../utils/session.js'
 
-const profile = studentProfile
-const lessons = getAvailableStudentLessons()
+const { user } = useAuth()
+const profile = computed(() => ({
+  ...studentProfile,
+  name: user.value?.name || studentProfile.name,
+}))
+const lessons = ref(getAvailableStudentLessons())
 const search = ref('')
+const loading = ref(false)
 
 const filteredLessons = computed(() => {
   const q = search.value?.trim().toLowerCase()
-  if (!q) return lessons
-  return lessons.filter(
+  if (!q) return lessons.value
+  return lessons.value.filter(
     (l) =>
       l.title.toLowerCase().includes(q) ||
       l.subject.toLowerCase().includes(q) ||
-      l.teacherName.toLowerCase().includes(q),
+      (l.teacherName || '').toLowerCase().includes(q),
   )
 })
 
 const inProgressLessons = computed(() =>
-  lessons.filter((l) => l.progress > 0 && l.progress < 100),
+  lessons.value.filter((l) => l.progress > 0 && l.progress < 100),
 )
+
+onMounted(async () => {
+  if (!isApiMode()) return
+  loading.value = true
+  try {
+    const data = await fetchStudentLessons()
+    lessons.value = data.map((l) => ({
+      id: l.id,
+      title: l.title,
+      subject: l.subject,
+      grade: l.grade,
+      teacherName: l.teacherName,
+      preview: l.preview,
+      icon: l.icon || 'mdi-book-open-page-variant',
+      progress: 0,
+    }))
+  } catch {
+    lessons.value = getAvailableStudentLessons()
+  } finally {
+    loading.value = false
+  }
+})
 </script>
 
 <style scoped>

@@ -105,9 +105,11 @@ import ChatPanel from '../../components/student/ChatPanel.vue'
 import QuizCard from '../../components/student/QuizCard.vue'
 import QuizResults from '../../components/student/QuizResults.vue'
 import FeedbackCard from '../../components/student/FeedbackCard.vue'
+import { fetchStudentLesson } from '../../api/student.js'
 import { useAiChat } from '../../composables/useAiChat.js'
 import { getStudentLessonById } from '../../data/studentData.js'
 import { ROUTES } from '../../constants/app.js'
+import { isApiMode } from '../../utils/session.js'
 
 const props = defineProps({
   id: { type: String, required: true },
@@ -115,7 +117,13 @@ const props = defineProps({
 
 const route = useRoute()
 const lessonId = computed(() => props.id || route.params.id)
-const lesson = computed(() => getStudentLessonById(lessonId.value))
+const lesson = ref({
+  title: '…',
+  subject: '',
+  grade: '',
+  teacherName: '',
+  quizQuestions: [],
+})
 
 const chatPanelRef = ref(null)
 const activeFeedback = ref([])
@@ -128,6 +136,7 @@ const {
   isTyping,
   sendMessage,
   loadConversation,
+  setLessonId,
 } = useAiChat([], [])
 
 const answeredCount = computed(() => Object.keys(quizAnswers).length)
@@ -150,18 +159,31 @@ const currentQuizIndex = computed(() => {
   return next >= 0 ? next : qs.length - 1
 })
 
-watch(
-  lessonId,
-  () => {
+async function loadLesson() {
+  activeFeedback.value = []
+  Object.keys(quizAnswers).forEach((k) => delete quizAnswers[k])
+  quizResetKey.value += 1
+
+  if (isApiMode()) {
+    try {
+      const data = await fetchStudentLesson(lessonId.value)
+      lesson.value = data
+      loadConversation(data.chatMessages || [], [])
+      setLessonId(Number(lessonId.value))
+    } catch {
+      const l = getStudentLessonById(lessonId.value)
+      lesson.value = l
+      loadConversation(l.chatMessages, l.aiResponses)
+    }
+  } else {
     const l = getStudentLessonById(lessonId.value)
+    lesson.value = l
     loadConversation(l.chatMessages, l.aiResponses)
-    activeFeedback.value = []
-    Object.keys(quizAnswers).forEach((k) => delete quizAnswers[k])
-    quizResetKey.value += 1
-    chatPanelRef.value?.scrollToBottom()
-  },
-  { immediate: true },
-)
+  }
+  chatPanelRef.value?.scrollToBottom()
+}
+
+watch(lessonId, loadLesson, { immediate: true })
 
 watch(messages, () => {
   chatPanelRef.value?.scrollToBottom()

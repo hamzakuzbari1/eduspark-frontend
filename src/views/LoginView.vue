@@ -80,12 +80,13 @@ import AuthShell from '../components/auth/AuthShell.vue'
 import EduSparkLogo from '../components/auth/EduSparkLogo.vue'
 import { useAuth } from '../composables/useAuth.js'
 import { validateLogin } from '../utils/validate.js'
+import { getErrorMessage } from '../api/client.js'
 
 const route = useRoute()
 const { login } = useAuth()
 
 const email = ref('teacher@eduspark.sy')
-const password = ref('')
+const password = ref('teacher123')
 const role = ref('teacher')
 const showPassword = ref(false)
 const loading = ref(false)
@@ -101,21 +102,26 @@ function clearError(field) {
   submitError.value = ''
 }
 
-function handleLogin() {
+async function handleLogin() {
   Object.keys(errors).forEach((k) => delete errors[k])
   const validation = validateLogin({ email: email.value, password: password.value })
   Object.assign(errors, validation)
   if (Object.keys(validation).length) return
 
   loading.value = true
-  setTimeout(() => {
-    loading.value = false
-    login({
+  submitError.value = ''
+  try {
+    await login({
       email: email.value,
+      password: password.value,
       name: role.value === 'teacher' ? 'أستاذ أحمد' : 'سارة محمد',
       role: role.value,
     })
-  }, 500)
+  } catch (err) {
+    submitError.value = getErrorMessage(err, 'تعذر تسجيل الدخول')
+  } finally {
+    loading.value = false
+  }
 }
 </script>
 

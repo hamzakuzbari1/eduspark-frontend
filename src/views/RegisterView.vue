@@ -99,6 +99,7 @@ import AuthShell from '../components/auth/AuthShell.vue'
 import EduSparkLogo from '../components/auth/EduSparkLogo.vue'
 import { useAuth } from '../composables/useAuth.js'
 import { validateRegister } from '../utils/validate.js'
+import { getErrorMessage } from '../api/client.js'
 
 const { register } = useAuth()
 
@@ -118,7 +119,7 @@ function clearError(field) {
   submitError.value = ''
 }
 
-function handleRegister() {
+async function handleRegister() {
   Object.keys(errors).forEach((k) => delete errors[k])
   const validation = validateRegister({
     name: name.value,
@@ -131,15 +132,19 @@ function handleRegister() {
   if (Object.keys(validation).length) return
 
   loading.value = true
-  setTimeout(() => {
-    loading.value = false
-    register({
+  submitError.value = ''
+  try {
+    await register({
       name: name.value,
       email: email.value,
       password: password.value,
       role: role.value,
     })
-  }, 600)
+  } catch (err) {
+    submitError.value = getErrorMessage(err, 'تعذر إنشاء الحساب')
+  } finally {
+    loading.value = false
+  }
 }
 </script>
 

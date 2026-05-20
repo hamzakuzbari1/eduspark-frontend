@@ -1,5 +1,8 @@
 import { nextTick, ref } from 'vue'
+import { sendChatApi } from '../api/student.js'
+import { getErrorMessage } from '../api/client.js'
 import { formatTimeArabic } from '../utils/format.js'
+import { isApiMode } from '../utils/session.js'
 
 export function useAiChat(initialMessages = [], responsePool = []) {
   const messages = ref([...initialMessages])
@@ -7,6 +10,7 @@ export function useAiChat(initialMessages = [], responsePool = []) {
   const isTyping = ref(false)
   const chatContainer = ref(null)
   const aiResponses = ref([...responsePool])
+  const lessonId = ref(null)
 
   function pickAiResponse() {
     const pool = aiResponses.value
@@ -23,7 +27,11 @@ export function useAiChat(initialMessages = [], responsePool = []) {
     }
   }
 
-  function sendMessage() {
+  function setLessonId(id) {
+    lessonId.value = id
+  }
+
+  async function sendMessage() {
     const text = chatInput.value.trim()
     if (!text || isTyping.value) return
 
@@ -35,19 +43,37 @@ export function useAiChat(initialMessages = [], responsePool = []) {
     })
     chatInput.value = ''
     scrollToBottom()
-
     isTyping.value = true
-    const delay = 1200 + Math.random() * 800
-    setTimeout(() => {
-      isTyping.value = false
+
+    try {
+      if (isApiMode() && lessonId.value) {
+        const data = await sendChatApi({ lessonId: lessonId.value, message: text })
+        messages.value = data.messages.map((m) => ({
+          id: m.id,
+          role: m.role,
+          text: m.text,
+          time: m.time || formatTimeArabic(),
+        }))
+      } else {
+        await new Promise((r) => setTimeout(r, 1200 + Math.random() * 800))
+        messages.value.push({
+          id: Date.now() + 1,
+          role: 'ai',
+          text: pickAiResponse(),
+          time: formatTimeArabic(),
+        })
+      }
+    } catch (err) {
       messages.value.push({
         id: Date.now() + 1,
         role: 'ai',
-        text: pickAiResponse(),
+        text: getErrorMessage(err, 'تعذر الاتصال بالمعلّم الذكي — حاول مرة أخرى'),
         time: formatTimeArabic(),
       })
+    } finally {
+      isTyping.value = false
       scrollToBottom()
-    }, delay)
+    }
   }
 
   function loadConversation(initial = [], responses = []) {
@@ -65,5 +91,6 @@ export function useAiChat(initialMessages = [], responsePool = []) {
     sendMessage,
     scrollToBottom,
     loadConversation,
+    setLessonId,
   }
 }

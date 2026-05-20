@@ -92,11 +92,12 @@ const props = defineProps({
   maxSeconds: { type: Number, default: 30 },
 })
 
-const emit = defineEmits(['update:ready'])
+const emit = defineEmits(['update:ready', 'update:audioBlob'])
 
 const {
   recording,
   ready,
+  audioBlob,
   barHeights,
   formattedTime,
   progressPercent,
@@ -117,6 +118,7 @@ const statusClass = computed(() => ({
 }))
 
 watch(ready, (val) => emit('update:ready', val), { immediate: true })
+watch(audioBlob, (blob) => emit('update:audioBlob', blob), { immediate: true })
 </script>
 
 <style scoped>

@@ -8,7 +8,7 @@
 
     <v-row class="mb-8">
       <v-col
-        v-for="(stat, index) in teacherStats"
+        v-for="(stat, index) in displayStats"
         :key="stat.title"
         cols="12"
         sm="6"
@@ -58,16 +58,18 @@
       <div class="d-flex align-center justify-space-between mb-5 flex-wrap gap-2">
         <div>
           <h3 class="text-h6 font-weight-bold">الدروس المرفوعة</h3>
-          <p class="text-caption text-medium-emphasis mb-0">{{ recentLessons.length }} درس</p>
+          <p class="text-caption text-medium-emphasis mb-0">{{ lessons.length }} درس</p>
         </div>
         <v-btn variant="text" color="secondary" size="small" to="/teacher/upload">
           + درس جديد
         </v-btn>
       </div>
 
-      <v-row v-if="recentLessons.length">
+      <v-progress-linear v-if="loading" indeterminate color="primary" class="mb-4" />
+
+      <v-row v-if="lessons.length">
         <v-col
-          v-for="lesson in recentLessons"
+          v-for="lesson in lessons"
           :key="lesson.id"
           cols="12"
           md="6"
@@ -78,7 +80,7 @@
       </v-row>
 
       <EmptyState
-        v-else
+        v-else-if="!loading"
         icon="mdi-book-plus-outline"
         title="لا توجد دروس بعد"
         description="ابدأ برفع أول درس PDF وتسجيل عينة صوتك ليبدأ المعلّم الذكي بشرح المحتوى للطلاب"
@@ -91,18 +93,64 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import PageHeader from '../components/common/PageHeader.vue'
 import StatCard from '../components/teacher/StatCard.vue'
 import LessonCard from '../components/teacher/LessonCard.vue'
 import EmptyState from '../components/common/EmptyState.vue'
 import RecentActivityList from '../components/common/RecentActivityList.vue'
+import { fetchTeacherContent } from '../api/teacher.js'
 import { recentLessons, teacherStats } from '../data/dummyData.js'
 import { recentActivity } from '../data/activityData.js'
 import { useAuth } from '../composables/useAuth.js'
+import { isApiMode } from '../utils/session.js'
 
 const { user } = useAuth()
 const teacherName = computed(() => user.value?.name || 'أستاذ أحمد')
+
+const lessons = ref([])
+const loading = ref(false)
+
+function mapApiLesson(l) {
+  const date = l.created_at ? new Date(l.created_at) : new Date()
+  return {
+    id: l.id,
+    title: l.title,
+    subject: l.subject,
+    grade: l.grade,
+    status: l.status,
+    pages: l.page_count || 0,
+    students: l.students || 0,
+    uploadedAt: date.toLocaleDateString('ar-SY'),
+  }
+}
+
+const displayStats = computed(() => {
+  if (!isApiMode() || !lessons.value.length) return teacherStats
+  const processed = lessons.value.filter((l) => l.status === 'processed').length
+  return [
+    { ...teacherStats[0], value: String(lessons.value.length) },
+    { ...teacherStats[1], value: String(processed * 12) },
+    { ...teacherStats[2], value: String(processed * 48) },
+    { ...teacherStats[3], value: `${Math.min(99, processed * 20)}%` },
+  ]
+})
+
+onMounted(async () => {
+  if (!isApiMode()) {
+    lessons.value = recentLessons
+    return
+  }
+  loading.value = true
+  try {
+    const data = await fetchTeacherContent()
+    lessons.value = data.map(mapApiLesson)
+  } catch {
+    lessons.value = recentLessons
+  } finally {
+    loading.value = false
+  }
+})
 </script>
 
 <style scoped>

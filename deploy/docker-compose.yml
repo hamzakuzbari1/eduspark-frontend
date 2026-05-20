@@ -1,0 +1,42 @@
+# Optional deployment stack — NOT required for local development.
+# Local dev: PostgreSQL + uvicorn + npm run dev (see README.md)
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: eduspark
+      POSTGRES_PASSWORD: eduspark
+      POSTGRES_DB: eduspark
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  backend:
+    build:
+      context: ../backend
+    env_file:
+      - ../.env
+    environment:
+      POSTGRES_HOST: db
+      DATABASE_URL: postgresql+asyncpg://eduspark:eduspark@db:5432/eduspark
+      UPLOAD_DIR: /app/uploads
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+
+  frontend:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_API_URL: http://localhost:8000
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:

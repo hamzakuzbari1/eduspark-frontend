@@ -1,55 +1,106 @@
-# EduSpark Frontend
+# EduSpark — منصة التعليم الذكي
 
-واجهة عربية (RTL) لمنصة EduSpark — تعليم ذكي بأسلوب المعلم ولهجة سورية.
+واجهة عربية (RTL) + FastAPI + **PostgreSQL محلي** — بدون الحاجة إلى Docker للتطوير.
 
-## التشغيل
+## المتطلبات
 
-```bash
-npm install
-npm run dev
-npm run build
+| أداة | الإصدار |
+|------|---------|
+| Node.js | 18+ |
+| Python | 3.10+ |
+| PostgreSQL | 14+ مع [pgvector](https://github.com/pgvector/pgvector#installation) |
+
+## 1) إعداد PostgreSQL (مرة واحدة)
+
+**مهم:** وجود قاعدة `eduspark` لا يعني وجود مستخدم `eduspark`. راجع **[LOCAL_SETUP.md](./LOCAL_SETUP.md)** إذا ظهر `password authentication failed`.
+
+```powershell
+cd backend
+python scripts\verify_setup.py    # بعد ضبط .env
 ```
 
-## المسارات
+أو من pgAdmin على قاعدة `eduspark`:
 
-| المسار | الوصف |
-|--------|--------|
-| `/login` | تسجيل الدخول (معلم / طالب) |
-| `/register` | إنشاء حساب + اختيار الدور |
-| `/teacher/dashboard` | لوحة المعلم — إحصائيات ودروس ونشاط |
-| `/teacher/upload` | رفع درس (PDF + صوت + مادة + صف) |
-| `/student/dashboard` | لوحة الطالب — بطاقات الدروس |
-| `/student/lesson/:id` | جلسة التعلّم (دردشة AI + اختبار + نتائج) |
-| `/student/profile` | اهتمامات ومستوى الصعوبة |
+```sql
+CREATE EXTENSION IF NOT EXISTS vector;
+-- وإنشاء مستخدم eduspark إن لم يكن موجوداً (انظر LOCAL_SETUP.md)
+```
 
-## المكوّنات القابلة لإعادة الاستخدام
+## 2) إعداد المشروع
 
-- `UploadCard` — رفع PDF مع شريط تقدم
-- `LoadingOverlay` — معالجة AI
-- `VoiceRecorder` — تسجيل 30 ثانية
-- `LessonCard` / `StudentLessonCard`
-- `ChatBubble` / `TypingIndicator` / `ChatPanel`
-- `QuizCard` / `QuizResults`
-- `AppSidebar` / `StudentSidebar` / `EmptyState`
+```bash
+cp .env.example .env
+# عدّل POSTGRES_* إذا كانت بيانات الاتصال مختلفة
+```
+
+### Backend
+
+```bash
+cd backend
+python -m venv venv
+venv\Scripts\activate          # Windows
+# source venv/bin/activate     # macOS/Linux
+pip install -r requirements.txt
+
+python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+- API: http://localhost:8000  
+- Swagger: http://localhost:8000/docs  
+
+### Frontend
+
+```bash
+# من جذر المشروع
+npm install
+npm run dev
+```
+
+- التطبيق: http://localhost:5173  
+
+## حسابات تجريبية (تُنشأ تلقائياً عند أول تشغيل)
+
+| الدور | البريد | كلمة المرور |
+|-------|--------|-------------|
+| معلم | teacher@eduspark.sy | teacher123 |
+| طالب | student@eduspark.sy | student123 |
+
+## ملف `.env`
+
+```env
+POSTGRES_HOST=localhost
+POSTGRES_PORT=5432
+POSTGRES_USER=eduspark
+POSTGRES_PASSWORD=eduspark
+POSTGRES_DB=eduspark
+VITE_API_URL=http://localhost:8000
+```
 
 ## هيكل المشروع
 
 ```
-src/
-├── composables/       usePdfUpload, useVoiceRecorder, useAiChat, useAuth
-├── utils/             session, validate
-├── components/
-│   ├── auth/          AuthShell
-│   ├── common/        PageHeader, UploadCard, LoadingOverlay, EmptyState, …
-│   ├── layout/        AppSidebar, StudentSidebar, AppHeader
-│   ├── teacher/       PdfUploadBox, PdfPreviewCard, StatCard, …
-│   └── student/       ChatPanel, QuizCard, QuizResults, …
-├── data/              dummyData, studentData, activityData, profileOptions
-└── views/             Login, Register, Teacher, Student
+├── backend/              FastAPI + SQLAlchemy + asyncpg
+│   ├── app/
+│   ├── scripts/          setup_local_db.sql
+│   └── uploads/          ملفات PDF/صوت محلياً
+├── src/                  Vue 3 + Vuetify
+├── .env                  إعدادات محلية
+└── deploy/               Docker (اختياري للنشر)
 ```
 
-## تجربة العرض التوضيحي
+## Docker (اختياري — للنشر فقط)
 
-**معلم:** `teacher@eduspark.sy` → لوحة التحكم → رفع درس → معالجة AI
+لا حاجة لـ Docker أثناء التطوير. للنشر لاحقاً:
 
-**طالب:** تسجيل كطالب → الدروس → درس → محادثة + اختبار → الملف الشخصي
+```bash
+docker compose -f deploy/docker-compose.yml up --build
+```
+
+## استكشاف الأخطاء
+
+| المشكلة | الحل |
+|---------|------|
+| `Connection refused` على 5432 | شغّل خدمة PostgreSQL محلياً |
+| `extension "vector" does not exist` | ثبّت pgvector على PostgreSQL |
+| `uvicorn` غير معروف | استخدم `python -m uvicorn` من مجلد `backend` |
+| الواجهة لا تتصل بالـ API | تأكد من `VITE_API_URL=http://localhost:8000` |

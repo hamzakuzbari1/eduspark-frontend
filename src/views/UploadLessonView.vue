@@ -49,7 +49,22 @@
           </v-col>
         </v-row>
 
-        <VoiceRecorder v-model:ready="voiceReady" class="mb-6" />
+        <VoiceRecorder
+          v-model:ready="voiceReady"
+          @update:audio-blob="voiceBlob = $event"
+          class="mb-6"
+        />
+
+        <v-alert
+          v-if="processError"
+          type="error"
+          variant="tonal"
+          class="mb-4 rounded-lg"
+          closable
+          @click:close="processError = ''"
+        >
+          {{ processError }}
+        </v-alert>
 
         <v-btn
           size="x-large"
@@ -131,9 +146,12 @@ import UploadCard from '../components/common/UploadCard.vue'
 import PdfPreviewCard from '../components/teacher/PdfPreviewCard.vue'
 import VoiceRecorder from '../components/teacher/VoiceRecorder.vue'
 import LoadingOverlay from '../components/common/LoadingOverlay.vue'
+import { uploadPdfApi, uploadVoiceApi, processLessonApi } from '../api/teacher.js'
+import { getErrorMessage } from '../api/client.js'
 import { usePdfUpload } from '../composables/usePdfUpload.js'
 import { MAX_PDF_SIZE_LABEL } from '../constants/app.js'
 import { subjects, grades } from '../data/dummyData.js'
+import { isApiMode } from '../utils/session.js'
 
 const router = useRouter()
 const maxSizeLabel = MAX_PDF_SIZE_LABEL
@@ -153,7 +171,9 @@ const {
 const subject = ref(null)
 const grade = ref(null)
 const voiceReady = ref(false)
+const voiceBlob = ref(null)
 const processing = ref(false)
+const processError = ref('')
 const processProgress = ref(0)
 const currentStep = ref(0)
 const showValidation = ref(false)
@@ -207,26 +227,78 @@ function stepTextClass(i) {
   return active ? 'font-weight-bold text-secondary' : 'text-medium-emphasis'
 }
 
-async function processLesson() {
-  showValidation.value = true
-  if (!canProcess.value) return
+function resolveSubjectLabel() {
+  return subjects.find((s) => s.value === subject.value)?.title || subject.value
+}
 
-  processing.value = true
-  processProgress.value = 0
-  currentStep.value = 0
+function resolveGradeLabel() {
+  return grades.find((g) => g.value === grade.value)?.title || grade.value
+}
 
-  for (let step = 0; step < processSteps.length; step++) {
+async function runProgressAnimation(maxStep) {
+  for (let step = 0; step < maxStep; step++) {
     currentStep.value = step
     const target = ((step + 1) / processSteps.length) * 100
     while (processProgress.value < target) {
       await delay(120)
       processProgress.value = Math.min(target, processProgress.value + 4)
     }
-    await delay(400)
+    await delay(300)
   }
+}
 
-  processing.value = false
-  router.push('/teacher/dashboard')
+async function processLesson() {
+  showValidation.value = true
+  if (!canProcess.value) return
+
+  processing.value = true
+  processError.value = ''
+  processProgress.value = 0
+  currentStep.value = 0
+
+  try {
+    if (isApiMode() && file.value) {
+      await runProgressAnimation(2)
+      const pdfRes = await uploadPdfApi({
+        file: file.value,
+        subject: resolveSubjectLabel(),
+        grade: resolveGradeLabel(),
+        title: file.value.name?.replace(/\.pdf$/i, '') || 'درس جديد',
+      })
+      const lessonId = pdfRes.lesson_id
+
+      if (voiceBlob.value) {
+        const voiceFile = new File([voiceBlob.value], 'voice-sample.webm', {
+          type: voiceBlob.value.type || 'audio/webm',
+        })
+        await uploadVoiceApi({ file: voiceFile, lessonId })
+      }
+
+      currentStep.value = 3
+      processProgress.value = 75
+      const result = await processLessonApi(lessonId)
+      if (result.status === 'error') {
+        throw new Error(result.message || 'فشلت معالجة الدرس')
+      }
+      processProgress.value = 100
+      currentStep.value = processSteps.length - 1
+    } else {
+      for (let step = 0; step < processSteps.length; step++) {
+        currentStep.value = step
+        const target = ((step + 1) / processSteps.length) * 100
+        while (processProgress.value < target) {
+          await delay(120)
+          processProgress.value = Math.min(target, processProgress.value + 4)
+        }
+        await delay(400)
+      }
+    }
+    router.push('/teacher/dashboard')
+  } catch (err) {
+    processError.value = getErrorMessage(err, 'فشل رفع أو معالجة الدرس')
+  } finally {
+    processing.value = false
+  }
 }
 
 function delay(ms) {
