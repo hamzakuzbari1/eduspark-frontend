@@ -88,13 +88,20 @@ VITE_API_URL=http://localhost:8000
 └── deploy/               Docker (اختياري للنشر)
 ```
 
-## Docker (اختياري — للنشر فقط)
+## Docker (اختياري — الحاويات كاملة)
 
-لا حاجة لـ Docker أثناء التطوير. للنشر لاحقاً:
+التطوير المحلي بدون Docker ما زال مدعوماً. لتشغيل الواجهة + API + PostgreSQL مع hot reload:
 
 ```bash
-docker compose -f deploy/docker-compose.yml up --build
+docker compose up --build
 ```
+
+| الخدمة | الرابط |
+|--------|--------|
+| الواجهة | http://localhost:5173 |
+| API | http://localhost:8000/docs |
+
+التفاصيل: **[DOCKER.md](./DOCKER.md)** — المنافذ، المتغيرات، تعارض 5432، استكشاف الأخطاء.
 
 ## استكشاف الأخطاء
 

@@ -1,42 +1,89 @@
-# OPTIONAL — for containerized deployment only (not used in local dev).
-# Run: docker compose up --build
-# Local dev: install PostgreSQL + see README.md
+# EduSpark — full stack (development with hot reload)
+# Run from project root: docker compose up --build
+#
+# Local PostgreSQL on port 5432? Set POSTGRES_PUBLISH_PORT=5433 in .env
 
 services:
   db:
-    image: pgvector/pgvector:pg16
+    image: postgres:16-alpine
+    restart: unless-stopped
     environment:
-      POSTGRES_USER: eduspark
-      POSTGRES_PASSWORD: eduspark
-      POSTGRES_DB: eduspark
+      POSTGRES_USER: ${POSTGRES_USER:-eduspark}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-eduspark}
+      POSTGRES_DB: ${POSTGRES_DB:-eduspark}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PUBLISH_PORT:-5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-eduspark} -d ${POSTGRES_DB:-eduspark}",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
 
   backend:
-    build: ./backend
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
     env_file:
-      - .env
+      - path: .env
+        required: false
     environment:
+      DOCKER_COMPOSE: "1"
       POSTGRES_HOST: db
-      DATABASE_URL: postgresql+asyncpg://eduspark:eduspark@db:5432/eduspark
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:-eduspark}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-eduspark}
+      POSTGRES_DB: ${POSTGRES_DB:-eduspark}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-eduspark}:${POSTGRES_PASSWORD:-eduspark}@db:5432/${POSTGRES_DB:-eduspark}
       UPLOAD_DIR: /app/uploads
+      ENABLE_PGVECTOR: ${ENABLE_PGVECTOR:-false}
+      ENABLE_EMBEDDINGS: ${ENABLE_EMBEDDINGS:-false}
+      CORS_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
     ports:
       - "8000:8000"
+    volumes:
+      - ./backend/app:/app/app
+      - ./backend/uploads:/app/uploads
     depends_on:
-      - db
+      db:
+        condition: service_healthy
+    command:
+      [
+        "uvicorn",
+        "app.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000",
+        "--reload",
+      ]
 
   frontend:
     build:
       context: .
       dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      # Vite proxy target (service name on Docker network)
+      VITE_API_URL: http://backend:8000
     ports:
       - "5173:5173"
-    environment:
-      VITE_API_URL: http://localhost:8000
+    volumes:
+      - ./src:/app/src
+      - ./public:/app/public
+      - ./index.html:/app/index.html
+      - ./vite.config.js:/app/vite.config.js
+      - frontend_node_modules:/app/node_modules
     depends_on:
       - backend
 
 volumes:
   pgdata:
+  frontend_node_modules:

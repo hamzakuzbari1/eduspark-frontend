@@ -1,7 +1,10 @@
-# Deployment (Docker) — optional
+# Deployment (Docker)
 
-Local development does **not** use this folder. See the root [README.md](../README.md).
+Use the **root** `docker-compose.yml` (same stack for dev and deployment bootstrap):
 
 ```bash
-docker compose -f deploy/docker-compose.yml up --build
+# From project root
+docker compose up --build
 ```
+
+Full guide: [DOCKER.md](../DOCKER.md)

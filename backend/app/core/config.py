@@ -1,5 +1,6 @@
 """Application settings — local PostgreSQL by default."""
 
+import os
 from functools import lru_cache
 from pathlib import Path
 from typing import Self
@@ -74,21 +75,25 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def apply_local_defaults(self) -> Self:
+        in_docker = os.getenv("DOCKER_COMPOSE", "").lower() in ("1", "true", "yes")
         host = (self.POSTGRES_HOST or "localhost").strip()
-        if host in ("db", "postgres"):
+        # Outside Docker, map compose service names to localhost for local Postgres
+        if not in_docker and host in ("db", "postgres"):
             host = "localhost"
 
         if not self.DATABASE_URL.strip():
             self.DATABASE_URL = self._build_async_url(host)
-        else:
+        elif not in_docker:
             self.DATABASE_URL = self._ensure_localhost(self.DATABASE_URL)
 
         if not self.DATABASE_URL_SYNC.strip():
             self.DATABASE_URL_SYNC = self._build_sync_url(host)
-        else:
+        elif not in_docker:
             self.DATABASE_URL_SYNC = self._ensure_localhost(self.DATABASE_URL_SYNC)
 
-        if not self.UPLOAD_DIR.strip() or self.UPLOAD_DIR.startswith("/app/"):
+        if not self.UPLOAD_DIR.strip():
+            self.UPLOAD_DIR = str(_backend_dir() / "uploads")
+        elif not in_docker and self.UPLOAD_DIR.replace("\\", "/").startswith("/app/"):
             self.UPLOAD_DIR = str(_backend_dir() / "uploads")
 
         self.POSTGRES_HOST = host

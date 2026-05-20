@@ -1,5 +1,9 @@
 # EduSpark Backend
 
+## Docker
+
+From project root: `docker compose up --build` — see [../DOCKER.md](../DOCKER.md).
+
 FastAPI + PostgreSQL (local) + pgvector + optional Gemini.
 
 ## Local run (no Docker)
