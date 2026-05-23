@@ -24,8 +24,7 @@ from app.schemas.student import (
     QuizSubmitRequest,
     QuizSubmitResponse,
 )
-from app.services.ai_service import generate_tutor_reply
-from app.services.rag_service import retrieve_chunks
+from app.services.chat_service import handle_student_chat
 
 router = APIRouter(prefix="/student", tags=["Student"])
 
@@ -131,64 +130,10 @@ async def student_chat(
     db: AsyncSession = Depends(get_db),
     student: User = Depends(require_role(UserRole.student)),
 ):
-    result = await db.execute(
-        select(Lesson).where(Lesson.id == body.lesson_id, Lesson.status == LessonStatus.processed)
-    )
-    lesson = result.scalar_one_or_none()
-    if not lesson:
-        raise HTTPException(status_code=404, detail="الدرس غير موجود")
-
-    profile_result = await db.execute(
-        select(StudentProfile).where(StudentProfile.user_id == student.id)
-    )
-    profile = profile_result.scalar_one_or_none()
-    difficulty = profile.difficulty if profile else "medium"
-
-    db.add(
-        ChatMessage(
-            lesson_id=lesson.id,
-            student_id=student.id,
-            role="student",
-            content=body.message,
-        )
-    )
-
-    chunks = await retrieve_chunks(db, lesson.id, body.message)
-    reply = await generate_tutor_reply(
-        body.message,
-        chunks,
-        lesson.persona_prompt or "",
-        lesson.subject,
-        lesson.grade,
-        difficulty,
-    )
-
-    ai_msg = ChatMessage(
-        lesson_id=lesson.id,
-        student_id=student.id,
-        role="ai",
-        content=reply,
-    )
-    db.add(ai_msg)
-    await db.commit()
-    await db.refresh(ai_msg)
-
-    history = await db.execute(
-        select(ChatMessage)
-        .where(ChatMessage.lesson_id == lesson.id, ChatMessage.student_id == student.id)
-        .order_by(ChatMessage.created_at)
-    )
-    messages = [
-        {
-            "id": m.id,
-            "role": m.role,
-            "text": m.content,
-            "time": _format_time(m.created_at),
-        }
-        for m in history.scalars().all()
-    ]
-
-    return ChatResponse(reply=reply, messages=messages)
+    try:
+        return await handle_student_chat(db, student, body)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.get("/quiz/{lesson_id}", response_model=list[QuizQuestionOut])

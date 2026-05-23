@@ -1,5 +1,5 @@
 import { computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { isNavigationFailure, useRouter } from 'vue-router'
 import { loginApi, registerApi } from '../api/auth.js'
 import { getErrorMessage } from '../api/client.js'
 import { getSession, setSession, clearSession, isApiMode } from '../utils/session.js'
@@ -17,7 +17,7 @@ export function useAuth() {
   const user = computed(() => session.value)
   const role = computed(() => session.value?.role ?? null)
 
-  function persistAndRedirect({ user: u, accessToken }, selectedRole) {
+  async function persistAndRedirect({ user: u, accessToken }, selectedRole) {
     if (!u?.email) {
       throw new Error('استجابة غير صالحة من الخادم')
     }
@@ -43,7 +43,14 @@ export function useAuth() {
 
     const target =
       u.role === 'teacher' ? ROUTES.TEACHER_DASHBOARD : ROUTES.STUDENT_DASHBOARD
-    return router.push(target)
+
+    try {
+      await router.push(target)
+    } catch (navErr) {
+      if (!isNavigationFailure(navErr)) {
+        throw navErr
+      }
+    }
   }
 
   async function login({ email, password, name, role: userRole }) {

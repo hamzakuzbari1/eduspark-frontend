@@ -4,28 +4,20 @@ import json
 import logging
 import re
 
+from app.ai.async_jobs import run_sync_with_timeout
 from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
 
-async def generate_quiz_questions(
-    lesson_text: str,
-    subject: str,
-    grade: str,
-    count: int | None = None,
-) -> list[dict]:
-    count = count or settings.QUIZ_COUNT
+def _generate_quiz_gemini_sync(lesson_text: str, subject: str, grade: str, count: int) -> list[dict]:
+    import google.generativeai as genai
+
     sample = lesson_text[:8000]
-
-    if settings.GEMINI_API_KEY:
-        try:
-            import google.generativeai as genai
-
-            genai.configure(api_key=settings.GEMINI_API_KEY)
-            model = genai.GenerativeModel(settings.GEMINI_MODEL)
-            prompt = f"""من محتوى الدرس التالي، أنشئ بالضبط {count} أسئلة اختيار من متعدد بالعربية.
+    genai.configure(api_key=settings.GEMINI_API_KEY)
+    model = genai.GenerativeModel(settings.GEMINI_MODEL)
+    prompt = f"""من محتوى الدرس التالي، أنشئ بالضبط {count} أسئلة اختيار من متعدد بالعربية.
 كل سؤال 4 خيارات (أ، ب، ج، د) وإجابة صحيحة واحدة وتلميح عند الخطأ.
 المادة: {subject}، الصف: {grade}.
 
@@ -35,15 +27,45 @@ async def generate_quiz_questions(
 المحتوى:
 {sample}
 """
-            response = model.generate_content(prompt)
-            text = (response.text or "").strip()
-            match = re.search(r"\[[\s\S]*\]", text)
-            if match:
-                items = json.loads(match.group())
-                return _normalize_quiz(items, count)
-        except Exception as exc:
-            logger.warning("Quiz generation failed: %s", exc)
+    response = model.generate_content(prompt)
+    text = (response.text or "").strip()
+    match = re.search(r"\[[\s\S]*\]", text)
+    if match:
+        items = json.loads(match.group())
+        return _normalize_quiz(items, count)
+    raise ValueError("Gemini quiz response had no JSON array")
 
+
+async def generate_quiz_questions(
+    lesson_text: str,
+    subject: str,
+    grade: str,
+    count: int | None = None,
+    *,
+    lesson_id: int | None = None,
+) -> list[dict]:
+    count = count or settings.QUIZ_COUNT
+
+    if settings.GEMINI_API_KEY:
+        try:
+            items = await run_sync_with_timeout(
+                _generate_quiz_gemini_sync,
+                lesson_text,
+                subject,
+                grade,
+                count,
+                timeout=float(settings.QUIZ_GENERATION_TIMEOUT_SECONDS),
+                label="QUIZ_GEMINI_GENERATE",
+                lesson_id=lesson_id,
+                default=None,
+            )
+            if items:
+                logger.info("[quiz] lesson_id=%s generated %s questions via Gemini", lesson_id, len(items))
+                return items
+        except Exception as exc:
+            logger.warning("[quiz] lesson_id=%s Gemini failed: %s", lesson_id, exc)
+
+    logger.info("[quiz] lesson_id=%s using default quiz questions", lesson_id)
     return _default_quiz(subject, count)
 
 

@@ -1,15 +1,25 @@
-"""Gemini tutoring with PDF-scoped RAG context."""
+"""Tutoring replies: cleaned RAG context → lesson-only LLM answers."""
 
 import logging
 
+from app.ai.llm import (
+    build_rag_prompt,
+    build_system_instruction,
+    generate_answer,
+    is_llm_available,
+)
+from app.ai.rag_context import format_chunks_for_prompt
 from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
-settings = get_settings()
 
 OUT_OF_SCOPE_REPLY = (
-    "عذراً، هذا السؤال خارج محتوى الدرس المرفوع. "
-    "راجع ملف PDF أو اسألني عن جزء موجود بالدرس."
+    "هالمعلومة ما موجودة بملف الدرس اللي رُفع. "
+    "جرّب تسأل عن فقرة أو مفهوم محدد من نفس الدرس."
+)
+
+LLM_UNAVAILABLE_REPLY = (
+    "المعلّم الذكي مو متصل. تحقق من OLLAMA_BASE_URL واسم النموذج (مثلاً gemma3:4b)."
 )
 
 
@@ -20,47 +30,52 @@ async def generate_tutor_reply(
     subject: str,
     grade: str,
     difficulty: str = "medium",
+    *,
+    lesson_title: str = "",
+    retrieval_meta: dict | None = None,
 ) -> str:
-    context = "\n\n---\n\n".join(context_chunks) if context_chunks else ""
+    settings = get_settings()
+    meta = retrieval_meta or {}
+    lesson_id = meta.get("lesson_id")
 
-    if not context.strip():
+    logger.info(
+        "generate_tutor_reply lesson_id=%s strategy=%s chunks=%s context_chars≈%s",
+        lesson_id,
+        meta.get("strategy"),
+        len(context_chunks),
+        len(format_chunks_for_prompt(context_chunks)) if context_chunks else 0,
+    )
+    for i, ch in enumerate(context_chunks[:3]):
+        logger.info("  llm_context[%s]=%r", i, ch[:100])
+
+    if not context_chunks:
+        if settings.RAG_DEBUG:
+            return (
+                f"[DEBUG] لا سياق. lesson_id={lesson_id} db={meta.get('total_in_db')} "
+                f"usable={meta.get('usable_in_db')} strategy={meta.get('strategy')}"
+            )
         return OUT_OF_SCOPE_REPLY
 
-    system = f"""{persona_prompt}
+    if not is_llm_available():
+        return LLM_UNAVAILABLE_REPLY if not settings.RAG_DEBUG else "[DEBUG] LLM not configured"
 
-قواعد صارمة:
-- أجب بالعربية السورية المبسّطة فقط.
-- استخدم فقط المعلومات من «محتوى الدرس» أدناه.
-- إذا الإجابة غير موجودة في المحتوى، قل أن السؤال خارج الدرس.
-- المادة: {subject}، الصف: {grade}، مستوى الطالب: {difficulty}.
-"""
-
-    user_prompt = f"""محتوى الدرس:
-{context[:12000]}
-
-سؤال الطالب:
-{question}
-"""
-
-    if settings.GEMINI_API_KEY:
-        try:
-            import google.generativeai as genai
-
-            genai.configure(api_key=settings.GEMINI_API_KEY)
-            model = genai.GenerativeModel(
-                settings.GEMINI_MODEL,
-                system_instruction=system,
-            )
-            response = model.generate_content(user_prompt)
-            reply = (response.text or "").strip()
-            if reply:
-                return reply
-        except Exception as exc:
-            logger.warning("Gemini chat failed: %s", exc)
-
-    # Fallback: simple extractive answer
-    snippet = context_chunks[0][:400] if context_chunks else ""
-    return (
-        f"باختصار من الدرس: {snippet}...\n\n"
-        "إذا بدك تفصيل أكثر، اسألني عن نقطة محددة من الدرس."
+    system = build_system_instruction(
+        persona_prompt, subject or "—", grade or "—", difficulty, lesson_title
     )
+    prompt = build_rag_prompt(
+        question,
+        context_chunks,
+        subject=subject,
+        grade=grade,
+        difficulty=difficulty,
+        lesson_title=lesson_title,
+    )
+
+    reply = await generate_answer(prompt, system_instruction=system, lesson_id=lesson_id)
+    if reply:
+        return reply
+
+    if settings.RAG_DEBUG:
+        return "[DEBUG] Gemma returned empty — see prompt in server logs."
+
+    return "تعذر توليد الجواب. جرّب إعادة صياغة السؤال."

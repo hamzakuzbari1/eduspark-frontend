@@ -133,6 +133,7 @@
       :show="processing"
       :progress="processProgress"
       :step="currentStep"
+      :subtitle="processHint || undefined"
     />
   </div>
 </template>
@@ -175,6 +176,7 @@ const voiceBlob = ref(null)
 const processing = ref(false)
 const processError = ref('')
 const processProgress = ref(0)
+const processHint = ref('')
 const currentStep = ref(0)
 const showValidation = ref(false)
 
@@ -253,6 +255,7 @@ async function processLesson() {
 
   processing.value = true
   processError.value = ''
+  processHint.value = ''
   processProgress.value = 0
   currentStep.value = 0
 
@@ -276,10 +279,11 @@ async function processLesson() {
 
       currentStep.value = 3
       processProgress.value = 75
-      const result = await processLessonApi(lessonId)
-      if (result.status === 'error') {
-        throw new Error(result.message || 'فشلت معالجة الدرس')
-      }
+      await processLessonApi(lessonId, {
+        onStatus: (s) => {
+          if (s?.message) processHint.value = s.message
+        },
+      })
       processProgress.value = 100
       currentStep.value = processSteps.length - 1
     } else {

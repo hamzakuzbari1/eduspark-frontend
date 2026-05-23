@@ -1,0 +1,6 @@
+# Optional AI stack (install in backend venv: pip install -r requirements-ai.txt)
+# Marker PDF uses surya internally via marker-pdf — do not install surya-ocr separately.
+marker-pdf>=1.10.0
+sentence-transformers>=3.0.0
+faiss-cpu>=1.8.0
+openai-whisper>=20240930

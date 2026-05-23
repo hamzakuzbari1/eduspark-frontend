@@ -1,5 +1,5 @@
 import { nextTick, ref } from 'vue'
-import { sendChatApi } from '../api/student.js'
+import { sendAiChatApi, voiceChatApi, resolveAiAudioUrl } from '../api/ai.js'
 import { getErrorMessage } from '../api/client.js'
 import { formatTimeArabic } from '../utils/format.js'
 import { isApiMode } from '../utils/session.js'
@@ -47,7 +47,7 @@ export function useAiChat(initialMessages = [], responsePool = []) {
 
     try {
       if (isApiMode() && lessonId.value) {
-        const data = await sendChatApi({ lessonId: lessonId.value, message: text })
+        const data = await sendAiChatApi({ lessonId: lessonId.value, message: text })
         messages.value = data.messages.map((m) => ({
           id: m.id,
           role: m.role,
@@ -76,6 +76,44 @@ export function useAiChat(initialMessages = [], responsePool = []) {
     }
   }
 
+  async function sendVoiceMessage(audioBlob) {
+    if (!audioBlob || isTyping.value || !lessonId.value || !isApiMode()) return
+
+    isTyping.value = true
+    try {
+      const file = new File([audioBlob], 'question.webm', {
+        type: audioBlob.type || 'audio/webm',
+      })
+      const data = await voiceChatApi({ file, lessonId: lessonId.value })
+      messages.value = data.messages.map((m) => ({
+        id: m.id,
+        role: m.role,
+        text: m.text,
+        time: m.time || formatTimeArabic(),
+        audioUrl: m.audioUrl,
+      }))
+      if (data.audio_url) {
+        const url = resolveAiAudioUrl(data.audio_url)
+        const last = messages.value[messages.value.length - 1]
+        if (last?.role === 'ai' && url) {
+          last.audioUrl = url
+          const audio = new Audio(url)
+          audio.play().catch(() => {})
+        }
+      }
+    } catch (err) {
+      messages.value.push({
+        id: Date.now(),
+        role: 'ai',
+        text: getErrorMessage(err, 'تعذر إرسال السؤال الصوتي'),
+        time: formatTimeArabic(),
+      })
+    } finally {
+      isTyping.value = false
+      scrollToBottom()
+    }
+  }
+
   function loadConversation(initial = [], responses = []) {
     messages.value = [...initial]
     aiResponses.value = [...responses]
@@ -89,6 +127,7 @@ export function useAiChat(initialMessages = [], responsePool = []) {
     isTyping,
     chatContainer,
     sendMessage,
+    sendVoiceMessage,
     scrollToBottom,
     loadConversation,
     setLessonId,

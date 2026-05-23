@@ -37,6 +37,7 @@
           :teacher-name="lesson.teacherName"
           class="w-100"
           @send="onSend"
+          @voice="onVoice"
         />
       </v-col>
 
@@ -135,6 +136,7 @@ const {
   chatInput,
   isTyping,
   sendMessage,
+  sendVoiceMessage,
   loadConversation,
   setLessonId,
 } = useAiChat([], [])
@@ -191,6 +193,10 @@ watch(messages, () => {
 
 function onSend() {
   sendMessage()
+}
+
+function onVoice(blob) {
+  sendVoiceMessage(blob)
 }
 
 function onQuizAnswer({ correct, questionId, selectedIndex }) {

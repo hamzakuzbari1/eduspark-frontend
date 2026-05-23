@@ -67,20 +67,26 @@ npm run dev
 
 ## ملف `.env`
 
-```env
-POSTGRES_HOST=localhost
-POSTGRES_PORT=5432
-POSTGRES_USER=eduspark
-POSTGRES_PASSWORD=eduspark
-POSTGRES_DB=eduspark
-VITE_API_URL=http://localhost:8000
+انسخ القالب وعدّل القيم الحقيقية محلياً (لا ترفع `.env` إلى Git):
+
+```bash
+cp .env.example .env
 ```
+
+المتغيرات الأساسية: `POSTGRES_*`, `JWT_SECRET`, `OLLAMA_BASE_URL`, `OLLAMA_MODEL=qwen2.5`, `USE_MARKER_PDF=true`.  
+القائمة الكاملة في **[.env.example](./.env.example)**.
+
+## AI Pipeline
+
+- **Marker PDF** → مقاطع في PostgreSQL → **RAG** → **Ollama (qwen2.5)**
+- الكود في `backend/app/ai/` — التفاصيل: **[backend/AI_PIPELINE.md](./backend/AI_PIPELINE.md)**
 
 ## هيكل المشروع
 
 ```
 ├── backend/              FastAPI + SQLAlchemy + asyncpg
 │   ├── app/
+│   │   └── ai/           RAG, LLM, Whisper, TTS (modular)
 │   ├── scripts/          setup_local_db.sql
 │   └── uploads/          ملفات PDF/صوت محلياً
 ├── src/                  Vue 3 + Vuetify

@@ -26,3 +26,11 @@ class ProcessResponse(BaseModel):
     lesson_id: int
     status: str
     message: str
+
+
+class LessonStatusOut(BaseModel):
+    lesson_id: int
+    status: str
+    message: str = ""
+    preview: str | None = None
+    page_count: int | None = None

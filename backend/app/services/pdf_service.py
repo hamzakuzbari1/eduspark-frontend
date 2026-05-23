@@ -37,8 +37,9 @@ def extract_text_from_pdf(pdf_path: str | Path) -> tuple[str, int, list[dict]]:
 
 
 def _normalize_arabic_text(text: str) -> str:
-    text = re.sub(r"\s+", " ", text)
-    return text.strip()
+    from app.ai.text_normalize import normalize_arabic_educational_text
+
+    return normalize_arabic_educational_text(re.sub(r"[ \t]+", " ", text))
 
 
 def _ocr_page(page: fitz.Page) -> str:

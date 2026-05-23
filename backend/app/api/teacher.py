@@ -12,17 +12,12 @@ from app.db.session import get_db
 from app.models.lesson import Lesson, LessonStatus
 from app.models.quiz import QuizQuestion
 from app.models.user import User, UserRole
-from app.schemas.teacher import LessonOut, ProcessResponse
-from app.services.lesson_processor import process_lesson
+from app.schemas.teacher import LessonOut, LessonStatusOut, ProcessResponse
+from app.services.lesson_process_api import start_lesson_processing
+from app.services.upload_service import ensure_upload_dir, save_pdf_upload
 
 router = APIRouter(prefix="/teacher", tags=["Teacher"])
 settings = get_settings()
-
-
-def _ensure_upload_dir() -> Path:
-    p = Path(settings.UPLOAD_DIR)
-    p.mkdir(parents=True, exist_ok=True)
-    return p
 
 
 @router.post("/upload/pdf")
@@ -35,51 +30,15 @@ async def upload_pdf(
     db: AsyncSession = Depends(get_db),
     teacher: User = Depends(require_role(UserRole.teacher)),
 ):
-    if file.content_type not in ("application/pdf", "application/octet-stream"):
-        raise HTTPException(status_code=400, detail="يجب أن يكون الملف PDF")
-
-    data = await file.read()
-    if len(data) > settings.MAX_PDF_BYTES:
-        raise HTTPException(status_code=400, detail="حجم الملف يتجاوز الحد المسموح")
-
-    upload_dir = _ensure_upload_dir() / f"teacher_{teacher.id}"
-    upload_dir.mkdir(parents=True, exist_ok=True)
-
-    if lesson_id:
-        result = await db.execute(
-            select(Lesson).where(Lesson.id == lesson_id, Lesson.teacher_id == teacher.id)
-        )
-        lesson = result.scalar_one_or_none()
-        if not lesson:
-            raise HTTPException(status_code=404, detail="الدرس غير موجود")
-    else:
-        lesson = Lesson(
-            teacher_id=teacher.id,
-            subject=subject,
-            grade=grade,
-            title=title or "درس جديد",
-            status=LessonStatus.draft,
-        )
-        db.add(lesson)
-        await db.flush()
-
-    filename = f"{lesson.id}_{uuid.uuid4().hex}.pdf"
-    pdf_path = upload_dir / filename
-    pdf_path.write_bytes(data)
-
-    lesson.pdf_path = str(pdf_path)
-    lesson.subject = subject
-    lesson.grade = grade
-    if title:
-        lesson.title = title
-    await db.commit()
-    await db.refresh(lesson)
-
-    return {
-        "lesson_id": lesson.id,
-        "filename": file.filename,
-        "message": "تم رفع ملف PDF بنجاح",
-    }
+    return await save_pdf_upload(
+        file=file,
+        subject=subject,
+        grade=grade,
+        title=title,
+        lesson_id=lesson_id,
+        db=db,
+        teacher=teacher,
+    )
 
 
 @router.post("/upload/voice")
@@ -100,8 +59,7 @@ async def upload_voice(
     if len(data) > settings.MAX_AUDIO_BYTES:
         raise HTTPException(status_code=400, detail="حجم الملف الصوتي كبير جداً")
 
-    upload_dir = _ensure_upload_dir() / f"teacher_{teacher.id}"
-    upload_dir.mkdir(parents=True, exist_ok=True)
+    upload_dir = ensure_upload_dir(teacher.id)
     ext = Path(file.filename or "voice.webm").suffix or ".webm"
     voice_path = upload_dir / f"{lesson.id}_voice_{uuid.uuid4().hex}{ext}"
     voice_path.write_bytes(data)
@@ -127,11 +85,27 @@ async def process_lesson_endpoint(
     if not lesson.pdf_path:
         raise HTTPException(status_code=400, detail="ارفع ملف PDF أولاً")
 
-    lesson = await process_lesson(db, lesson)
-    return ProcessResponse(
+    return await start_lesson_processing(db, lesson, teacher.id)
+
+
+@router.get("/lessons/{lesson_id}/status", response_model=LessonStatusOut)
+async def lesson_process_status(
+    lesson_id: int,
+    db: AsyncSession = Depends(get_db),
+    teacher: User = Depends(require_role(UserRole.teacher)),
+):
+    result = await db.execute(
+        select(Lesson).where(Lesson.id == lesson_id, Lesson.teacher_id == teacher.id)
+    )
+    lesson = result.scalar_one_or_none()
+    if not lesson:
+        raise HTTPException(status_code=404, detail="الدرس غير موجود")
+    return LessonStatusOut(
         lesson_id=lesson.id,
         status=lesson.status.value,
-        message=lesson.error_message or "اكتملت المعالجة بنجاح",
+        message=lesson.error_message or "",
+        preview=lesson.preview,
+        page_count=lesson.page_count,
     )
 
 

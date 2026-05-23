@@ -4,7 +4,7 @@ import logging
 
 from sqlalchemy import select
 
-from app.core.security import hash_password
+from app.core.security import hash_password, verify_password
 from app.db.session import AsyncSessionLocal
 from app.models.profile import StudentProfile
 from app.models.user import User, UserRole
@@ -31,8 +31,14 @@ async def seed_demo_users() -> None:
     async with AsyncSessionLocal() as db:
         for item in DEMO_USERS:
             result = await db.execute(select(User).where(User.email == item["email"]))
-            if result.scalar_one_or_none():
+            user = result.scalar_one_or_none()
+
+            if user:
+                if not verify_password(item["password"], user.hashed_password):
+                    user.hashed_password = hash_password(item["password"])
+                    logger.info("Reset demo password for %s (hash was invalid)", item["email"])
                 continue
+
             user = User(
                 email=item["email"],
                 name=item["name"],

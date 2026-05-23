@@ -118,6 +118,9 @@ async function handleLogin() {
       role: role.value,
     })
   } catch (err) {
+    if (import.meta.env.DEV) {
+      console.error('[login]', err)
+    }
     submitError.value = getErrorMessage(err, 'تعذر تسجيل الدخول')
   } finally {
     loading.value = false

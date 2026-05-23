@@ -31,9 +31,11 @@
       <ChatInput
         :model-value="modelValue"
         :loading="isTyping"
+        :voice-loading="isTyping"
         :placeholder="placeholder"
         @update:model-value="$emit('update:modelValue', $event)"
         @send="$emit('send')"
+        @voice="$emit('voice', $event)"
       />
     </div>
   </v-card>
@@ -53,7 +55,7 @@ defineProps({
   placeholder: { type: String, default: 'اكتب سؤالك للمعلّم الذكي...' },
 })
 
-defineEmits(['update:modelValue', 'send'])
+defineEmits(['update:modelValue', 'send', 'voice'])
 
 const messagesEl = ref(null)
 

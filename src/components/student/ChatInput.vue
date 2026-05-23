@@ -1,6 +1,19 @@
 <template>
-  <div class="chat-input-bar">
+  <div class="chat-input-bar d-flex align-center gap-2">
+    <v-btn
+      v-if="showVoice"
+      icon
+      variant="tonal"
+      color="secondary"
+      :loading="voiceLoading"
+      :disabled="disabled || voiceLoading"
+      aria-label="سؤال صوتي"
+      @click="toggleVoice"
+    >
+      <v-icon>{{ recording ? 'mdi-stop' : 'mdi-microphone' }}</v-icon>
+    </v-btn>
     <v-text-field
+      class="chat-input-field flex-grow-1"
       :model-value="modelValue"
       :placeholder="placeholder"
       variant="solo-filled"
@@ -9,7 +22,6 @@
       hide-details
       bg-color="rgba(8, 12, 24, 0.6)"
       color="secondary"
-      class="chat-input-field"
       :disabled="disabled"
       @update:model-value="$emit('update:modelValue', $event)"
       @keyup.enter="submit"
@@ -32,14 +44,51 @@
 </template>
 
 <script setup>
+import { onUnmounted, ref } from 'vue'
+
 const props = defineProps({
   modelValue: { type: String, default: '' },
   placeholder: { type: String, default: 'اكتب سؤالك هنا...' },
   disabled: { type: Boolean, default: false },
   loading: { type: Boolean, default: false },
+  showVoice: { type: Boolean, default: true },
+  voiceLoading: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['update:modelValue', 'send'])
+const emit = defineEmits(['update:modelValue', 'send', 'voice'])
+
+const recording = ref(false)
+let mediaRecorder = null
+let chunks = []
+
+async function toggleVoice() {
+  if (recording.value) {
+    mediaRecorder?.stop()
+    return
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    chunks = []
+    mediaRecorder = new MediaRecorder(stream)
+    mediaRecorder.ondataavailable = (e) => {
+      if (e.data.size) chunks.push(e.data)
+    }
+    mediaRecorder.onstop = () => {
+      stream.getTracks().forEach((t) => t.stop())
+      recording.value = false
+      const blob = new Blob(chunks, { type: mediaRecorder.mimeType || 'audio/webm' })
+      emit('voice', blob)
+    }
+    mediaRecorder.start()
+    recording.value = true
+  } catch {
+    recording.value = false
+  }
+}
+
+onUnmounted(() => {
+  mediaRecorder?.stop()
+})
 
 function submit() {
   if (!props.modelValue?.trim() || props.disabled) return
